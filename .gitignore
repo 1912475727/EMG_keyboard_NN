@@ -46,9 +46,7 @@ dmypy.json
 logs/
 lightning_logs/
 
-# Data (local data folder - do not commit)
-data/
-data
+# Data (bids_data and archives only; data/ is tracked)
 bids_data
 *.tar.gz
 
