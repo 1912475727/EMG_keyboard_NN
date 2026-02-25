@@ -301,7 +301,7 @@ class CNNTransformerCTCModule(pl.LightningModule):
         if ff_dim is None:
             ff_dim = 4 * num_features
 
-        self.model = nn.Sequential(
+        self.front_end = nn.Sequential(
             SpectrogramNorm(channels=self.NUM_BANDS * self.ELECTRODE_CHANNELS),
             MultiBandRotationInvariantMLP(
                 in_features=in_features,
@@ -309,16 +309,18 @@ class CNNTransformerCTCModule(pl.LightningModule):
                 num_bands=self.NUM_BANDS,
             ),
             nn.Flatten(start_dim=2),
-            CNNTransformerEncoder(
-                d_model=num_features,
-                cnn_layers=cnn_layers,
-                cnn_kernel_size=cnn_kernel_size,
-                transformer_layers=transformer_layers,
-                n_heads=n_heads,
-                ff_dim=ff_dim,
-                dropout=dropout,
-                max_len=max_len,
-            ),
+        )
+        self.encoder = CNNTransformerEncoder(
+            d_model=num_features,
+            cnn_layers=cnn_layers,
+            cnn_kernel_size=cnn_kernel_size,
+            transformer_layers=transformer_layers,
+            n_heads=n_heads,
+            ff_dim=ff_dim,
+            dropout=dropout,
+            max_len=max_len,
+        )
+        self.head = nn.Sequential(
             nn.Linear(num_features, charset().num_classes),
             nn.LogSoftmax(dim=-1),
         )
@@ -334,8 +336,24 @@ class CNNTransformerCTCModule(pl.LightningModule):
             }
         )
 
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        return self.model(inputs)
+    def forward(
+        self,
+        inputs: torch.Tensor,
+        input_lengths: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Run front-end, encoder (with optional padding mask), then head."""
+        x = self.front_end(inputs)  # (T, N, num_features)
+        if input_lengths is not None:
+            # (N, T) bool: True = padding, to be ignored by attention
+            T = x.size(0)
+            src_key_padding_mask = (
+                torch.arange(T, device=x.device, dtype=torch.long).unsqueeze(0)
+                >= input_lengths.unsqueeze(1).to(x.device)
+            )
+        else:
+            src_key_padding_mask = None
+        x = self.encoder(x, src_key_padding_mask=src_key_padding_mask)
+        return self.head(x)
 
     def _step(
         self, phase: str, batch: dict[str, torch.Tensor], *args, **kwargs
@@ -346,7 +364,7 @@ class CNNTransformerCTCModule(pl.LightningModule):
         target_lengths = batch["target_lengths"]
         N = len(input_lengths)  # batch_size
 
-        emissions = self.forward(inputs)
+        emissions = self.forward(inputs, input_lengths=input_lengths)
 
         # Shrink input lengths by an amount equivalent to the conv encoder's
         # temporal receptive field to compute output activation lengths for CTCLoss.

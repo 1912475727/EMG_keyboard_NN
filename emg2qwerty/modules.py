@@ -425,8 +425,18 @@ class CNNTransformerEncoder(nn.Module):
             enable_nested_tensor=False,
         )
 
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+    def forward(
+        self,
+        inputs: torch.Tensor,
+        src_key_padding_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Forward with optional padding mask for variable-length sequences.
+
+        Args:
+            inputs: (T, N, d_model).
+            src_key_padding_mask: (N, T) boolean, True = ignore (padding). Optional.
+        """
         x = self.cnn(inputs)  # (T, N, d_model)
         x = self.pos_encoding(x)  # add position and dropout
-        x = self.transformer(x)  # (T, N, d_model)
+        x = self.transformer(x, src_key_padding_mask=src_key_padding_mask)  # (T, N, d_model)
         return x
