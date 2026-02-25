@@ -289,9 +289,10 @@ class CNNTransformerCTCModule(pl.LightningModule):
         n_heads: int,
         ff_dim: int | None,
         dropout: float,
-        optimizer: DictConfig,
-        lr_scheduler: DictConfig,
-        decoder: DictConfig,
+        max_len: int = 5000,
+        optimizer: DictConfig | None = None,
+        lr_scheduler: DictConfig | None = None,
+        decoder: DictConfig | None = None,
     ) -> None:
         super().__init__()
         self.save_hyperparameters()
@@ -316,6 +317,7 @@ class CNNTransformerCTCModule(pl.LightningModule):
                 n_heads=n_heads,
                 ff_dim=ff_dim,
                 dropout=dropout,
+                max_len=max_len,
             ),
             nn.Linear(num_features, charset().num_classes),
             nn.LogSoftmax(dim=-1),

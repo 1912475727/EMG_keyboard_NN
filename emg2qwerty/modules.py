@@ -4,6 +4,7 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+import math
 from collections.abc import Sequence
 
 import torch
@@ -341,9 +342,40 @@ class _TemporalConv1dBlock(nn.Module):
         return x.permute(2, 0, 1)  # (T, N, C)
 
 
+class PositionalEncoding(nn.Module):
+    """Sinusoidal positional encoding (Vaswani et al., "Attention is All You Need").
+    Adds position information to the sequence dimension so the Transformer can use order.
+
+    Args:
+        d_model (int): Model dimension (must be even for sin/cos pairing).
+        max_len (int): Maximum sequence length (longer sequences use a slice).
+        dropout (float): Dropout applied after adding positional encoding.
+    """
+
+    def __init__(self, d_model: int, max_len: int = 5000, dropout: float = 0.1) -> None:
+        super().__init__()
+        self.dropout = nn.Dropout(p=dropout)
+        pe = torch.zeros(max_len, d_model)
+        position = torch.arange(0, max_len, dtype=torch.float32).unsqueeze(1)
+        div_term = torch.exp(
+            torch.arange(0, d_model, 2, dtype=torch.float32) * (-math.log(10000.0) / d_model)
+        )
+        pe[:, 0::2] = torch.sin(position * div_term)
+        pe[:, 1::2] = torch.cos(position * div_term)
+        pe = pe.unsqueeze(1)  # (max_len, 1, d_model) for broadcasting to (T, N, d_model)
+        self.register_buffer("pe", pe)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (T, N, d_model)
+        T = x.size(0)
+        x = x + self.pe[:T]
+        return self.dropout(x)
+
+
 class CNNTransformerEncoder(nn.Module):
     """Two-stage encoder: temporal CNN (local features) then Transformer (global context).
     Input and output shape: (T, N, d_model). No temporal downsampling; suitable for CTC.
+    Uses sinusoidal positional encoding before the Transformer stack.
 
     Args:
         d_model (int): Model dimension (e.g. 768).
@@ -353,6 +385,7 @@ class CNNTransformerEncoder(nn.Module):
         n_heads (int): Number of attention heads.
         ff_dim (int): Feed-forward hidden dim (often 4 * d_model).
         dropout (float): Dropout probability.
+        max_len (int): Maximum sequence length for positional encoding.
     """
 
     def __init__(
@@ -364,6 +397,7 @@ class CNNTransformerEncoder(nn.Module):
         n_heads: int = 8,
         ff_dim: int | None = None,
         dropout: float = 0.1,
+        max_len: int = 5000,
     ) -> None:
         super().__init__()
         if ff_dim is None:
@@ -375,6 +409,7 @@ class CNNTransformerEncoder(nn.Module):
             kernel_size=cnn_kernel_size,
             dropout=dropout,
         )
+        self.pos_encoding = PositionalEncoding(d_model, max_len=max_len, dropout=dropout)
         encoder_layer = nn.TransformerEncoderLayer(
             d_model=d_model,
             nhead=n_heads,
@@ -392,183 +427,6 @@ class CNNTransformerEncoder(nn.Module):
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         x = self.cnn(inputs)  # (T, N, d_model)
+        x = self.pos_encoding(x)  # add position and dropout
         x = self.transformer(x)  # (T, N, d_model)
         return x
-
-
-# -----------------------------------------------------------------------------
-# Conformer: Convolution-augmented Transformer for sequence modeling.
-# Reference: Gulati et al., "Conformer: Convolution-augmented Transformer for
-# Speech Recognition", https://arxiv.org/abs/2005.08100
-# -----------------------------------------------------------------------------
-
-
-class ConformerConvModule(nn.Module):
-    """Convolution module used inside a Conformer block. Applies pre-norm,
-    pointwise conv, gated linear unit (GLU), depthwise temporal conv, batch norm,
-    Swish, and pointwise conv. Does not apply residual (caller adds it).
-    Input and output shape: (T, N, d_model).
-
-    Args:
-        d_model (int): Model dimension (number of channels).
-        kernel_size (int): Kernel size of the depthwise temporal convolution.
-    """
-
-    def __init__(self, d_model: int, kernel_size: int = 31) -> None:
-        super().__init__()
-        assert kernel_size % 2 == 1, "kernel_size should be odd for same padding"
-        self.layer_norm = nn.LayerNorm(d_model)
-        self.pointwise_1 = nn.Conv1d(d_model, 2 * d_model, kernel_size=1)
-        self.depthwise = nn.Conv1d(
-            d_model,
-            d_model,
-            kernel_size=kernel_size,
-            padding=(kernel_size - 1) // 2,
-            groups=d_model,
-        )
-        self.batch_norm = nn.BatchNorm1d(d_model)
-        self.pointwise_2 = nn.Conv1d(d_model, d_model, kernel_size=1)
-        self.activation = nn.SiLU()
-
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        # Pre-norm, then (T, N, C) -> (N, C, T) for Conv1d
-        x = self.layer_norm(inputs).permute(1, 2, 0)
-
-        # Pointwise + GLU: (N, 2C, T) -> gate and value, (N, C, T)
-        x = self.pointwise_1(x)
-        x = x.chunk(2, dim=1)[0] * torch.sigmoid(x.chunk(2, dim=1)[1])
-
-        # Depthwise conv (same padding)
-        x = self.depthwise(x)
-        x = self.batch_norm(x)
-        x = self.activation(x)
-        x = self.pointwise_2(x)
-
-        # (N, C, T) -> (T, N, C). Residual is applied in ConformerBlock.
-        return x.permute(2, 0, 1)
-
-
-class ConformerFeedForward(nn.Module):
-    """Macaron-style half-step feed-forward. FFN(x) = Linear2(Swish(Linear1(x))).
-    Used as 0.5 * FFN(x) in the Conformer block. Input and output: (T, N, d_model).
-
-    Args:
-        d_model (int): Model dimension.
-        expansion (int): Expansion factor for the hidden layer; hidden = d_model * expansion.
-        dropout (float): Dropout probability.
-    """
-
-    def __init__(
-        self,
-        d_model: int,
-        expansion: int = 4,
-        dropout: float = 0.1,
-    ) -> None:
-        super().__init__()
-        hidden = d_model * expansion
-        self.linear_1 = nn.Linear(d_model, hidden)
-        self.linear_2 = nn.Linear(hidden, d_model)
-        self.activation = nn.SiLU()
-        self.dropout = nn.Dropout(dropout)
-
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        x = self.linear_1(inputs)
-        x = self.activation(x)
-        x = self.dropout(x)
-        x = self.linear_2(x)
-        return self.dropout(x)
-
-
-class ConformerBlock(nn.Module):
-    """Single Conformer block: half FFN -> multi-head self-attention -> conv -> half FFN,
-    each with pre-norm and residual. Input and output shape: (T, N, d_model).
-
-    Args:
-        d_model (int): Model dimension.
-        n_heads (int): Number of attention heads.
-        ff_expansion (int): Feed-forward expansion factor.
-        conv_kernel_size (int): Kernel size for the conv module.
-        dropout (float): Dropout probability.
-    """
-
-    def __init__(
-        self,
-        d_model: int,
-        n_heads: int = 8,
-        ff_expansion: int = 4,
-        conv_kernel_size: int = 31,
-        dropout: float = 0.1,
-    ) -> None:
-        super().__init__()
-        self.ffn_1 = ConformerFeedForward(d_model, expansion=ff_expansion, dropout=dropout)
-        self.norm_1 = nn.LayerNorm(d_model)
-        self.self_attn = nn.MultiheadAttention(
-            d_model,
-            n_heads,
-            dropout=dropout,
-            batch_first=False,
-        )
-        self.norm_2 = nn.LayerNorm(d_model)
-        self.conv_module = ConformerConvModule(d_model, kernel_size=conv_kernel_size)
-        self.norm_3 = nn.LayerNorm(d_model)
-        self.ffn_2 = ConformerFeedForward(d_model, expansion=ff_expansion, dropout=dropout)
-        self.norm_4 = nn.LayerNorm(d_model)
-
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        # Half-step FFN (macaron)
-        x = inputs + 0.5 * self.ffn_1(self.norm_1(inputs))
-
-        # Multi-head self-attention (pre-norm, residual)
-        attn_in = self.norm_2(x)
-        attn_out, _ = self.self_attn(attn_in, attn_in, attn_in, need_weights=False)
-        x = x + attn_out
-
-        # Convolution module (residual at block level)
-        x = x + self.conv_module(self.norm_3(x))
-
-        # Half-step FFN (macaron)
-        x = x + 0.5 * self.ffn_2(self.norm_4(x))
-        return x
-
-
-class ConformerEncoder(nn.Module):
-    """Stack of Conformer blocks. Replaces TDSConvEncoder for sequence modeling.
-    Input and output shape: (T, N, d_model). No temporal downsampling.
-
-    Args:
-        d_model (int): Model dimension (e.g. 768 to match TDS front-end output).
-        n_layers (int): Number of Conformer blocks.
-        n_heads (int): Number of attention heads per block.
-        ff_expansion (int): Feed-forward expansion factor.
-        conv_kernel_size (int): Kernel size in the conv module.
-        dropout (float): Dropout probability.
-    """
-
-    def __init__(
-        self,
-        d_model: int,
-        n_layers: int = 6,
-        n_heads: int = 8,
-        ff_expansion: int = 4,
-        conv_kernel_size: int = 31,
-        dropout: float = 0.1,
-    ) -> None:
-        super().__init__()
-        self.layers = nn.ModuleList(
-            [
-                ConformerBlock(
-                    d_model=d_model,
-                    n_heads=n_heads,
-                    ff_expansion=ff_expansion,
-                    conv_kernel_size=conv_kernel_size,
-                    dropout=dropout,
-                )
-                for _ in range(n_layers)
-            ]
-        )
-
-    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        x = inputs
-        for layer in self.layers:
-            x = layer(x)
-        return x  # (T, N, d_model)
