@@ -90,9 +90,15 @@ def main(config: DictConfig):
     callback_configs = config.get("callbacks", [])
     callbacks = [instantiate(cfg) for cfg in callback_configs]
 
+    # Instantiate logger(s) so Trainer receives Logger instances, not config dicts
+    trainer_kw = dict(config.trainer)
+    if "logger" in trainer_kw and trainer_kw["logger"] is not None:
+        logger_configs = trainer_kw["logger"]
+        trainer_kw["logger"] = [instantiate(cfg) for cfg in logger_configs]
+
     # Initialize trainer
     trainer = pl.Trainer(
-        **config.trainer,
+        **trainer_kw,
         callbacks=callbacks,
     )
 

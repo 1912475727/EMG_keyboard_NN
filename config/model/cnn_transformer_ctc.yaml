@@ -1,0 +1,19 @@
+# @package _global_
+# CNN + Transformer encoder (replaces TDS). Same front-end, then TemporalCNN + Transformer.
+module:
+  _target_: emg2qwerty.lightning.CNNTransformerCTCModule
+  in_features: 528  # freq * channels = (n_fft // 2 + 1) * 16
+  mlp_features: [384]
+  # CNN stage (local temporal features)
+  cnn_layers: 3
+  cnn_kernel_size: 31
+  # Transformer stage (global context)
+  transformer_layers: 4
+  n_heads: 8
+  ff_dim: null  # default 4 * d_model (3072 for d_model=768)
+  dropout: 0.1
+
+datamodule:
+  _target_: emg2qwerty.lightning.WindowedEMGDataModule
+  window_length: 8000  # 4 sec windows for 2kHz EMG
+  padding: [1800, 200]  # 900ms past context, 100ms future context

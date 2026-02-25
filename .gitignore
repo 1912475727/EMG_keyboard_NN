@@ -43,6 +43,7 @@ dmypy.json
 .hypothesis
 
 # Logs and checkpoints
+log/
 logs/
 lightning_logs/
 

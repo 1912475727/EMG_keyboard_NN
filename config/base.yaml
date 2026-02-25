@@ -22,15 +22,33 @@ trainer:
   num_nodes: 1
   max_epochs: 150
   default_root_dir: ${hydra:runtime.output_dir}
+  
+  # Real-time logging configuration
+  logger:
+    - _target_: pytorch_lightning.loggers.TensorBoardLogger
+      save_dir: ${hydra:runtime.output_dir}/logs
+      name: tensorboard
+      version: null
+      log_graph: True
+      default_hp_metric: True
+  
+  # Frequent logging for real-time updates
+  log_every_n_steps: 10  # Log every 10 batches
+  val_check_interval: 0.5  # Validate every 0.5 epochs
 
 callbacks:
   - _target_: pytorch_lightning.callbacks.LearningRateMonitor
+    logging_interval: step  # Log LR every step (not just epoch)
+    
   - _target_: pytorch_lightning.callbacks.ModelCheckpoint
     dirpath: ${hydra:runtime.output_dir}/checkpoints
     monitor: ${monitor_metric}
     mode: ${monitor_mode}
     save_last: True
     verbose: True
+  
+  - _target_: pytorch_lightning.callbacks.TQDMProgressBar
+    refresh_rate: 10  # Update progress bar every 10 batches
 
 dataset:
   root: ${hydra:runtime.cwd}/data
