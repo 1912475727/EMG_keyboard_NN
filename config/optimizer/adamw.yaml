@@ -1,0 +1,6 @@
+# @package _global_
+# AdamW: decoupled weight decay (often better generalization than Adam).
+optimizer:
+  _target_: torch.optim.AdamW
+  lr: 1e-3
+  weight_decay: 0.01
