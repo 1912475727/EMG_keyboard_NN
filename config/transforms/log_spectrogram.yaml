@@ -5,11 +5,16 @@ to_tensor:
 
 noise:
   _target_: emg2qwerty.transforms.AdditiveGaussianNoise
-  scale: 0.08  # noise std = 8% of signal std
+  scale: 0.04  # noise std = 4% of signal std
 
 channel_dropout:
   _target_: emg2qwerty.transforms.ChannelDropout
   prob: 0.1   # drop each electrode channel with prob 0.1
+  channel_dim: -1
+
+gain_scaling:
+  _target_: emg2qwerty.transforms.ChannelGainScaling
+  max_scale: 0.2  # per-channel gain in [1 - max_scale, 1 + max_scale]
   channel_dim: -1
 
 band_rotation:
@@ -37,8 +42,6 @@ specaug:
 transforms:
   train:
     - ${to_tensor}
-    - ${noise}
-    - ${channel_dropout}
     - ${band_rotation}
     - ${temporal_jitter}
     - ${logspec}

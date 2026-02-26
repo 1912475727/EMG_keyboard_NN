@@ -177,6 +177,40 @@ class ChannelDropout:
 
 
 @dataclass
+class ChannelGainScaling:
+    """Randomly rescales electrode channels (dim ``channel_dim``) with
+    multiplicative gains sampled per channel. Input shape (T, bands, C) or
+    any tensor where the last dim (by default) is channels.
+
+    Args:
+        max_scale (float): Maximum fractional deviation from 1.0. Each
+            channel gain is sampled uniformly from
+            [1 - max_scale, 1 + max_scale].
+        channel_dim (int): Dimension of electrode channels. (default: -1)
+    """
+
+    max_scale: float = 0.2
+    channel_dim: int = -1
+
+    def __post_init__(self) -> None:
+        assert self.max_scale >= 0.0
+
+    def __call__(self, tensor: torch.Tensor) -> torch.Tensor:
+        if self.max_scale <= 0:
+            return tensor
+        d = self.channel_dim if self.channel_dim >= 0 else tensor.ndim + self.channel_dim
+        C = tensor.shape[d]
+        low, high = 1.0 - self.max_scale, 1.0 + self.max_scale
+        gains = torch.empty(C, device=tensor.device).uniform_(low, high)
+        # Broadcast gains to tensor: shape like (1, 1, C) for (T, 2, C), etc.
+        for _ in range(d):
+            gains = gains.unsqueeze(0)
+        for _ in range(tensor.ndim - d - 1):
+            gains = gains.unsqueeze(-1)
+        return tensor * gains
+
+
+@dataclass
 class TemporalAlignmentJitter:
     """Applies a temporal jittering augmentation that randomly jitters the
     alignment of left and right EMG data by up to ``max_offset`` timesteps.

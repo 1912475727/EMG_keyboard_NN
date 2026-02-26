@@ -1,7 +1,7 @@
 defaults:
   - user: single_user
   - transforms: log_spectrogram
-  - model: tds_conv_crctc  # TDS baseline + CR-CTC (use cnn_transformer_ctc or tds_conv_ctc for alternatives)
+  - model: cnn_transformer_ctc  # CNN + Transformer + CR-CTC (use tds_conv_crctc or tds_conv_ctc for alternatives)
   - optimizer: adamw  # AdamW + decoupled weight decay (use adam for plain Adam)
   - lr_scheduler: reduce_on_plateau  # Adaptive: reduce LR when val metric plateaus (use linear_warmup_cosine_annealing for cosine)
   - decoder: ctc_greedy
