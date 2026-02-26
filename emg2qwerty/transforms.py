@@ -163,13 +163,16 @@ class ChannelDropout:
     def __call__(self, tensor: torch.Tensor) -> torch.Tensor:
         if self.prob <= 0:
             return tensor
-        C = tensor.shape[self.channel_dim]
+        d = self.channel_dim if self.channel_dim >= 0 else tensor.ndim + self.channel_dim
+        C = tensor.shape[d]
         mask = (torch.rand(C, device=tensor.device) > self.prob).to(
             tensor.dtype
         )
-        # Broadcast mask to tensor shape (e.g. (1, 1, C) for (T, 2, C))
-        for _ in range(tensor.ndim + self.channel_dim):
+        # Broadcast mask to tensor: 1s everywhere except at channel_dim (e.g. (1, 1, C) for (T, 2, C))
+        for _ in range(d):
             mask = mask.unsqueeze(0)
+        for _ in range(tensor.ndim - d - 1):
+            mask = mask.unsqueeze(-1)
         return tensor * mask
 
 

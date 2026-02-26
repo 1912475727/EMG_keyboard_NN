@@ -2,5 +2,5 @@
 # AdamW: decoupled weight decay (often better generalization than Adam).
 optimizer:
   _target_: torch.optim.AdamW
-  lr: 1e-3
+  lr: 3e-3  # increased from 1e-3 for faster convergence (e.g. with augmentation)
   weight_decay: 0.01

@@ -47,7 +47,8 @@ log/
 logs/
 lightning_logs/
 
-# Data (bids_data and archives only; data/ is tracked)
+# Data (ignore dataset files; put .hdf5 in data/ locally)
+data/
 bids_data
 *.tar.gz
 
