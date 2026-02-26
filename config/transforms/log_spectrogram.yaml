@@ -3,6 +3,15 @@ to_tensor:
   _target_: emg2qwerty.transforms.ToTensor
   fields: [emg_left, emg_right]
 
+noise:
+  _target_: emg2qwerty.transforms.AdditiveGaussianNoise
+  scale: 0.08  # noise std = 8% of signal std
+
+channel_dropout:
+  _target_: emg2qwerty.transforms.ChannelDropout
+  prob: 0.1   # drop each electrode channel with prob 0.1
+  channel_dim: -1
+
 band_rotation:
   _target_: emg2qwerty.transforms.ForEach  # i.i.d rotation offset for each band
   transform:
@@ -28,6 +37,8 @@ specaug:
 transforms:
   train:
     - ${to_tensor}
+    - ${noise}
+    - ${channel_dropout}
     - ${band_rotation}
     - ${temporal_jitter}
     - ${logspec}

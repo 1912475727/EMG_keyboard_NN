@@ -121,6 +121,59 @@ class RandomBandRotation:
 
 
 @dataclass
+class AdditiveGaussianNoise:
+    """Adds Gaussian noise to the raw EMG tensor for data augmentation.
+    Applied in the time domain (before spectrogram). Input shape (T, ...).
+
+    Args:
+        scale (float): Noise standard deviation as a fraction of the signal's
+            std per sample. E.g. 0.05–0.15 for mild augmentation.
+    """
+
+    scale: float = 0.08
+
+    def __post_init__(self) -> None:
+        assert self.scale >= 0.0
+
+    def __call__(self, tensor: torch.Tensor) -> torch.Tensor:
+        if self.scale <= 0:
+            return tensor
+        std = tensor.std().clamp(min=1e-6).item()
+        noise = self.scale * std * torch.randn_like(tensor, device=tensor.device)
+        return tensor + noise
+
+
+@dataclass
+class ChannelDropout:
+    """Randomly zeros out electrode channels (dim ``channel_dim``) with
+    probability ``prob`` per channel. Simulates bad contacts or missing
+    channels. Input shape (T, bands, C); channel_dim defaults to -1 (C).
+
+    Args:
+        prob (float): Probability of dropping each channel independently.
+        channel_dim (int): Dimension of electrode channels. (default: -1)
+    """
+
+    prob: float = 0.1
+    channel_dim: int = -1
+
+    def __post_init__(self) -> None:
+        assert 0 <= self.prob <= 1
+
+    def __call__(self, tensor: torch.Tensor) -> torch.Tensor:
+        if self.prob <= 0:
+            return tensor
+        C = tensor.shape[self.channel_dim]
+        mask = (torch.rand(C, device=tensor.device) > self.prob).to(
+            tensor.dtype
+        )
+        # Broadcast mask to tensor shape (e.g. (1, 1, C) for (T, 2, C))
+        for _ in range(tensor.ndim + self.channel_dim):
+            mask = mask.unsqueeze(0)
+        return tensor * mask
+
+
+@dataclass
 class TemporalAlignmentJitter:
     """Applies a temporal jittering augmentation that randomly jitters the
     alignment of left and right EMG data by up to ``max_offset`` timesteps.
