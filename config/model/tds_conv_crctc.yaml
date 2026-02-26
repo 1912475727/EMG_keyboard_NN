@@ -1,0 +1,17 @@
+# @package _global_
+# TDS baseline + CR-CTC (Consistency-Regularized CTC). Use with: model=tds_conv_crctc
+# Base config uses AdamW and reduce_on_plateau; no experiment needed.
+module:
+  _target_: emg2qwerty.lightning.TDSConvCTCModule
+  in_features: 528
+  mlp_features: [384]
+  block_channels: [24, 24, 24, 24]
+  kernel_width: 32
+  use_cr_ctc: true
+  cr_ctc_consistency_weight: 0.0   # set > 0 when using two-view consistency
+  cr_ctc_entropy_weight: 0.01     # entropy regularization for less peaky posteriors
+
+datamodule:
+  _target_: emg2qwerty.lightning.WindowedEMGDataModule
+  window_length: 8000
+  padding: [1800, 200]

@@ -1,0 +1,6 @@
+# @package _global_
+# In-process launcher: no submitit. Use this for local training on Windows
+# (submitit_local has Windows compatibility issues) or when you want a single
+# run in the same process with live progress.
+defaults:
+  - override /hydra/launcher: basic

@@ -20,6 +20,7 @@ from torchmetrics import MetricCollection
 from emg2qwerty import utils
 from emg2qwerty.charset import charset
 from emg2qwerty.data import LabelData, WindowedEMGDataset
+from emg2qwerty.losses import CRCTCLoss
 from emg2qwerty.metrics import CharacterErrorRates
 from emg2qwerty.modules import (
     CNNTransformerEncoder,
@@ -108,7 +109,7 @@ class WindowedEMGDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             collate_fn=WindowedEMGDataset.collate,
             pin_memory=True,
-            persistent_workers=True,
+            persistent_workers=self.num_workers > 0,
         )
 
     def val_dataloader(self) -> DataLoader:
@@ -119,7 +120,7 @@ class WindowedEMGDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             collate_fn=WindowedEMGDataset.collate,
             pin_memory=True,
-            persistent_workers=True,
+            persistent_workers=self.num_workers > 0,
         )
 
     def test_dataloader(self) -> DataLoader:
@@ -134,7 +135,7 @@ class WindowedEMGDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             collate_fn=WindowedEMGDataset.collate,
             pin_memory=True,
-            persistent_workers=True,
+            persistent_workers=self.num_workers > 0,
         )
 
 
@@ -148,9 +149,12 @@ class TDSConvCTCModule(pl.LightningModule):
         mlp_features: Sequence[int],
         block_channels: Sequence[int],
         kernel_width: int,
-        optimizer: DictConfig,
-        lr_scheduler: DictConfig,
-        decoder: DictConfig,
+        use_cr_ctc: bool = False,
+        cr_ctc_consistency_weight: float = 0.0,
+        cr_ctc_entropy_weight: float = 0.0,
+        optimizer: DictConfig = None,
+        lr_scheduler: DictConfig = None,
+        decoder: DictConfig = None,
     ) -> None:
         super().__init__()
         self.save_hyperparameters()
@@ -180,8 +184,16 @@ class TDSConvCTCModule(pl.LightningModule):
             nn.LogSoftmax(dim=-1),
         )
 
-        # Criterion
-        self.ctc_loss = nn.CTCLoss(blank=charset().null_class)
+        # Criterion: standard CTC or CR-CTC (Consistency-Regularized CTC)
+        blank = charset().null_class
+        if use_cr_ctc:
+            self.ctc_loss = CRCTCLoss(
+                blank=blank,
+                consistency_weight=cr_ctc_consistency_weight,
+                entropy_weight=cr_ctc_entropy_weight,
+            )
+        else:
+            self.ctc_loss = nn.CTCLoss(blank=blank)
 
         # Decoder
         self.decoder = instantiate(decoder)
@@ -290,6 +302,9 @@ class CNNTransformerCTCModule(pl.LightningModule):
         ff_dim: int | None,
         dropout: float,
         max_len: int = 5000,
+        use_cr_ctc: bool = False,
+        cr_ctc_consistency_weight: float = 0.0,
+        cr_ctc_entropy_weight: float = 0.0,
         optimizer: DictConfig | None = None,
         lr_scheduler: DictConfig | None = None,
         decoder: DictConfig | None = None,
@@ -325,7 +340,15 @@ class CNNTransformerCTCModule(pl.LightningModule):
             nn.LogSoftmax(dim=-1),
         )
 
-        self.ctc_loss = nn.CTCLoss(blank=charset().null_class)
+        blank = charset().null_class
+        if use_cr_ctc:
+            self.ctc_loss = CRCTCLoss(
+                blank=blank,
+                consistency_weight=cr_ctc_consistency_weight,
+                entropy_weight=cr_ctc_entropy_weight,
+            )
+        else:
+            self.ctc_loss = nn.CTCLoss(blank=blank)
         self.decoder = instantiate(decoder)
 
         metrics = MetricCollection([CharacterErrorRates()])

@@ -5,6 +5,10 @@ module:
   mlp_features: [384]
   block_channels: [24, 24, 24, 24]
   kernel_width: 32  # Total temporal receptive field of 125 samples given 4 layers
+  # CR-CTC (Consistency-Regularized CTC): set use_cr_ctc=true to use CRCTCLoss
+  use_cr_ctc: false
+  cr_ctc_consistency_weight: 0.0
+  cr_ctc_entropy_weight: 0.0
 
 datamodule:
   _target_: emg2qwerty.lightning.WindowedEMGDataModule

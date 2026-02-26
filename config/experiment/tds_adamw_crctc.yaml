@@ -1,0 +1,11 @@
+# @package _global_
+# Training setup: TDS baseline + AdamW + CR-CTC (Consistency-Regularized CTC).
+# Use with: python -m emg2qwerty.train experiment=tds_adamw_crctc cluster=basic ...
+# Base config already uses optimizer=adamw; this overrides model to TDS and enables CR-CTC.
+defaults:
+  - override /model: tds_conv_ctc
+
+module:
+  use_cr_ctc: true
+  cr_ctc_consistency_weight: 0.0   # set > 0 when using two-view consistency (second forward)
+  cr_ctc_entropy_weight: 0.01      # entropy regularization for less peaky posteriors

@@ -1,7 +1,7 @@
 defaults:
   - user: single_user
   - transforms: log_spectrogram
-  - model: cnn_transformer_ctc  # CNN + Transformer encoder (use tds_conv_ctc for TDS baseline)
+  - model: tds_conv_crctc  # TDS baseline + CR-CTC (use cnn_transformer_ctc or tds_conv_ctc for alternatives)
   - optimizer: adamw  # AdamW + decoupled weight decay (use adam for plain Adam)
   - lr_scheduler: reduce_on_plateau  # Adaptive: reduce LR when val metric plateaus (use linear_warmup_cosine_annealing for cosine)
   - decoder: ctc_greedy
@@ -10,9 +10,10 @@ defaults:
 
 seed: 1501
 batch_size: 32
-num_workers: 4  # Number of workers for dataloading
+num_workers: 0  # 0 = main process only (avoids WinError 1455 / paging file on Windows when workers load torch). Use 4 on Linux/Colab for faster loading.
 train: True  # Whether to train or only run validation and test
 checkpoint: null  # Optional path to checkpoint file
+# Best checkpoint is selected by this metric (e.g. val/CER); also logged to CSV and TensorBoard
 monitor_metric: val/CER
 monitor_mode: min
 
@@ -31,6 +32,11 @@ trainer:
       version: null
       log_graph: True
       default_hp_metric: True
+    # CSV logger: metrics (train/val loss, val/CER, etc.) per epoch for easy inspection and multirun comparison
+    - _target_: pytorch_lightning.loggers.CSVLogger
+      save_dir: ${hydra:runtime.output_dir}/logs
+      name: csv
+      version: null
   
   # Frequent logging for real-time updates
   log_every_n_steps: 10  # Log every 10 batches

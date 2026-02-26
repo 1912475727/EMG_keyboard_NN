@@ -13,6 +13,10 @@ module:
   ff_dim: null  # default 4 * d_model (3072 for d_model=768)
   dropout: 0.1
   max_len: 5000  # max sequence length for sinusoidal positional encoding
+  # CR-CTC (Consistency-Regularized CTC): set use_cr_ctc=true to use CRCTCLoss
+  use_cr_ctc: false
+  cr_ctc_consistency_weight: 0.0  # weight for consistency between two augmented views (need second forward)
+  cr_ctc_entropy_weight: 0.0      # weight for entropy regularization (less peaky posteriors)
 
 datamodule:
   _target_: emg2qwerty.lightning.WindowedEMGDataModule
