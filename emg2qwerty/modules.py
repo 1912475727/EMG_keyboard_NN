@@ -368,7 +368,16 @@ class PositionalEncoding(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         # x: (T, N, d_model)
         T = x.size(0)
-        x = x + self.pe[:T]
+        max_pe = self.pe.size(0)
+        if T <= max_pe:
+            x = x + self.pe[:T]
+        else:
+            # Sequence longer than max_len: pad position encoding with zeros for positions >= max_pe
+            pe_extended = torch.zeros(
+                T, 1, x.size(-1), device=x.device, dtype=x.dtype
+            )
+            pe_extended[:max_pe] = self.pe
+            x = x + pe_extended
         return self.dropout(x)
 
 

@@ -7,10 +7,12 @@
 import logging
 import os
 import pprint
+import traceback
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+import torch
 import hydra
 import pytorch_lightning as pl
 from hydra.utils import get_original_cwd, instantiate
@@ -64,12 +66,27 @@ def main(config: DictConfig):
     )
     if config.checkpoint is not None:
         log.info(f"Loading module from checkpoint {config.checkpoint}")
-        module = module.load_from_checkpoint(
-            config.checkpoint,
-            optimizer=config.optimizer,
-            lr_scheduler=config.lr_scheduler,
-            decoder=config.decoder,
-        )
+        # Build module init kwargs from current config so checkpoints with missing/different
+        # hparams (e.g. external user7.ckpt) still instantiate correctly.
+        module_cfg = OmegaConf.to_container(config.module, resolve=True)
+        assert isinstance(module_cfg, dict)
+        module_kw = {k: v for k, v in module_cfg.items() if k != "_target_"}
+        # PyTorch 2.6+ defaults to weights_only=True; Lightning checkpoints contain OmegaConf/typing.
+        _original_torch_load = torch.load
+        try:
+            def _torch_load_allow_pickle(*args, **kwargs):
+                kwargs.setdefault("weights_only", False)
+                return _original_torch_load(*args, **kwargs)
+            torch.load = _torch_load_allow_pickle
+            module = module.load_from_checkpoint(
+                config.checkpoint,
+                optimizer=config.optimizer,
+                lr_scheduler=config.lr_scheduler,
+                decoder=config.decoder,
+                **module_kw,
+            )
+        finally:
+            torch.load = _original_torch_load
 
     # Instantiate LightningDataModule
     log.info(f"Instantiating LightningDataModule {config.datamodule}")
@@ -117,17 +134,39 @@ def main(config: DictConfig):
             trainer.checkpoint_callback.best_model_path
         )
 
-    # Validate and test on the best checkpoint (if training), or on the
-    # loaded `config.checkpoint` (otherwise)
-    val_metrics = trainer.validate(module, datamodule)
-    test_metrics = trainer.test(module, datamodule)
+    # Fixed path in project root so results are always findable (e.g. when running test from notebook)
+    results_file = Path(working_dir) / "latest_test_results.txt"
 
-    results = {
-        "val_metrics": val_metrics,
-        "test_metrics": test_metrics,
-        "best_checkpoint": trainer.checkpoint_callback.best_model_path,
-    }
-    pprint.pprint(results, sort_dicts=False)
+    try:
+        # Validate and test on the best checkpoint (if training), or on the loaded config.checkpoint (otherwise)
+        val_metrics = trainer.validate(module, datamodule)
+        test_metrics = trainer.test(module, datamodule)
+
+        best_ckpt = (
+            trainer.checkpoint_callback.best_model_path
+            if config.train and getattr(trainer.checkpoint_callback, "best_model_path", None)
+            else getattr(config, "checkpoint", None)
+        )
+        results = {
+            "val_metrics": val_metrics,
+            "test_metrics": test_metrics,
+            "best_checkpoint": best_ckpt,
+        }
+        results_text = pprint.pformat(results, sort_dicts=False)
+        log.info("Validation and test results:\n%s", results_text)
+        pprint.pprint(results, sort_dicts=False)
+        results_file.write_text(results_text, encoding="utf-8")
+        log.info("Results written to %s", results_file.resolve())
+        # Also write to run dir if different (Hydra may set cwd to run dir)
+        run_dir_file = Path.cwd() / "test_results.txt"
+        if run_dir_file.resolve() != results_file.resolve():
+            run_dir_file.write_text(results_text, encoding="utf-8")
+    except Exception as e:
+        err_msg = f"Error during validate/test:\n{traceback.format_exc()}"
+        log.exception("Error during validate/test")
+        results_file.write_text(err_msg, encoding="utf-8")
+        log.info("Error details written to %s", results_file.resolve())
+        raise
 
 
 if __name__ == "__main__":

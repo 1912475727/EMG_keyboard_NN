@@ -54,3 +54,6 @@ bids_data
 
 # LM
 wikitext-103-raw*
+
+# Large checkpoints in c147model (reports and metrics are tracked)
+c147model/**/*.ckpt

@@ -42,6 +42,7 @@ specaug:
 transforms:
   train:
     - ${to_tensor}
+    - ${noise}
     - ${band_rotation}
     - ${temporal_jitter}
     - ${logspec}

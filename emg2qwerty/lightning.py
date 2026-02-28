@@ -91,10 +91,8 @@ class WindowedEMGDataModule(pl.LightningDataModule):
                 WindowedEMGDataset(
                     hdf5_path,
                     transform=self.test_transform,
-                    # Feed the entire session at once without windowing/padding
-                    # at test time for more realism
-                    window_length=None,
-                    padding=(0, 0),
+                    window_length=self.window_length,
+                    padding=self.padding,
                     jitter=False,
                 )
                 for hdf5_path in self.test_sessions
@@ -124,13 +122,11 @@ class WindowedEMGDataModule(pl.LightningDataModule):
         )
 
     def test_dataloader(self) -> DataLoader:
-        # Test dataset does not involve windowing and entire sessions are
-        # fed at once. Limit batch size to 1 to fit within GPU memory and
-        # avoid any influence of padding (while collating multiple batch items)
-        # in test scores.
+        # Test uses same windowing as val (window_length, padding) so sequence
+        # lengths stay within model capacity and metrics are comparable to val.
         return DataLoader(
             self.test_dataset,
-            batch_size=1,
+            batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
             collate_fn=WindowedEMGDataset.collate,
