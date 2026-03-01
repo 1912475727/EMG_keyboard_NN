@@ -2,5 +2,5 @@
 # AdamW: decoupled weight decay (often better generalization than Adam).
 optimizer:
   _target_: torch.optim.AdamW
-  lr: 1e-3  # baseline (ReduceLROnPlateau steps down on plateau)
+  lr: 8e-4  # slightly reduced from 1e-3
   weight_decay: 0.01

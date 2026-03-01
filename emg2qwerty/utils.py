@@ -17,9 +17,16 @@ def instantiate_optimizer_and_scheduler(
     params: Iterator[nn.Parameter],
     optimizer_config: DictConfig,
     lr_scheduler_config: DictConfig,
+    trainer: Any = None,
 ) -> dict[str, Any]:
     optimizer = instantiate(optimizer_config, params)
-    scheduler = instantiate(lr_scheduler_config.scheduler, optimizer)
+    sched_cfg = lr_scheduler_config.scheduler
+    if trainer is not None and OmegaConf.select(sched_cfg, "_total_steps_from_trainer", default=False):
+        total_steps = trainer.max_epochs * len(trainer.datamodule.train_dataloader())
+        sched_dict = {k: v for k, v in OmegaConf.to_container(sched_cfg, resolve=True).items() if k != "_total_steps_from_trainer"}
+        sched_dict["total_steps"] = total_steps
+        sched_cfg = OmegaConf.create(sched_dict)
+    scheduler = instantiate(sched_cfg, optimizer)
     lr_scheduler = instantiate(lr_scheduler_config, scheduler=scheduler)
     return {
         "optimizer": optimizer,

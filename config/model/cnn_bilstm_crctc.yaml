@@ -1,6 +1,6 @@
 # @package _global_
 # CNN + BiLSTM + CR-CTC: 3-layer CNN (kernel 11), 2-layer BiLSTM. Gradient clipping in base.
-# For warmup, run with: model=cnn_bilstm_crctc lr_scheduler=linear_warmup_cosine_annealing
+# For step-level warmup (first 500 steps), run with: lr_scheduler=linear_warmup_cosine_annealing_steps
 module:
   _target_: emg2qwerty.lightning.CNNBiLSTMCTCModule
   in_features: 528  # freq * channels = (n_fft // 2 + 1) * 16

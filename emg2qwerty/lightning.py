@@ -248,6 +248,10 @@ class TDSConvCTCModule(pl.LightningModule):
             target = LabelData.from_labels(targets[: target_lengths[i], i])
             metrics.update(prediction=predictions[i], target=target)
 
+        blank_idx = charset().null_class
+        pred = emissions.argmax(dim=-1)
+        blank_rate = (pred == blank_idx).float().mean()
+        self.log(f"{phase}/blank_rate", blank_rate, on_epoch=True, batch_size=N, sync_dist=True, prog_bar=True)
         self.log(f"{phase}/loss", loss, batch_size=N, sync_dist=True)
         return loss
 
@@ -279,6 +283,7 @@ class TDSConvCTCModule(pl.LightningModule):
             self.parameters(),
             optimizer_config=self.hparams.optimizer,
             lr_scheduler_config=self.hparams.lr_scheduler,
+            trainer=self.trainer,
         )
 
 
@@ -416,6 +421,10 @@ class CNNTransformerCTCModule(pl.LightningModule):
             target = LabelData.from_labels(targets[: target_lengths[i], i])
             metrics.update(prediction=predictions[i], target=target)
 
+        blank_idx = charset().null_class
+        pred = emissions.argmax(dim=-1)
+        blank_rate = (pred == blank_idx).float().mean()
+        self.log(f"{phase}/blank_rate", blank_rate, on_epoch=True, batch_size=N, sync_dist=True, prog_bar=True)
         self.log(f"{phase}/loss", loss, batch_size=N, sync_dist=True)
         return loss
 
@@ -447,6 +456,7 @@ class CNNTransformerCTCModule(pl.LightningModule):
             self.parameters(),
             optimizer_config=self.hparams.optimizer,
             lr_scheduler_config=self.hparams.lr_scheduler,
+            trainer=self.trainer,
         )
 
 
@@ -554,6 +564,10 @@ class CNNBiLSTMCTCModule(pl.LightningModule):
             target = LabelData.from_labels(targets_np[: target_lengths_np[i], i])
             metrics.update(prediction=predictions[i], target=target)
 
+        blank_idx = charset().null_class
+        pred = emissions.argmax(dim=-1)
+        blank_rate = (pred == blank_idx).float().mean()
+        self.log(f"{phase}/blank_rate", blank_rate, on_epoch=True, batch_size=N, sync_dist=True, prog_bar=True)
         self.log(f"{phase}/loss", loss, batch_size=N, sync_dist=True)
         return loss
 
@@ -585,6 +599,7 @@ class CNNBiLSTMCTCModule(pl.LightningModule):
             self.parameters(),
             optimizer_config=self.hparams.optimizer,
             lr_scheduler_config=self.hparams.lr_scheduler,
+            trainer=self.trainer,
         )
 
 
@@ -715,6 +730,10 @@ class ConformerCTCModule(pl.LightningModule):
             target = LabelData.from_labels(targets_np[: target_lengths_np[i], i])
             metrics.update(prediction=predictions[i], target=target)
 
+        blank_idx = charset().null_class
+        pred = emissions.argmax(dim=-1)
+        blank_rate = (pred == blank_idx).float().mean()
+        self.log(f"{phase}/blank_rate", blank_rate, on_epoch=True, batch_size=N, sync_dist=True, prog_bar=True)
         self.log(f"{phase}/loss", loss, batch_size=N, sync_dist=True)
         return loss
 
@@ -746,4 +765,5 @@ class ConformerCTCModule(pl.LightningModule):
             self.parameters(),
             optimizer_config=self.hparams.optimizer,
             lr_scheduler_config=self.hparams.lr_scheduler,
+            trainer=self.trainer,
         )
