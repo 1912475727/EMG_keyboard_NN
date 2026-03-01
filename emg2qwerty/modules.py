@@ -449,3 +449,151 @@ class CNNTransformerEncoder(nn.Module):
         x = self.pos_encoding(x)  # add position and dropout
         x = self.transformer(x, src_key_padding_mask=src_key_padding_mask)  # (T, N, d_model)
         return x
+
+
+# -----------------------------------------------------------------------------
+# Conformer: convolution-augmented transformer (Gulati et al., ASR).
+# Replaces CNN+Transformer with a single stack of Conformer blocks.
+# -----------------------------------------------------------------------------
+
+
+class _ConformerFeedForward(nn.Module):
+    """Half-step feed-forward (Macaron style). FFN(x) = Linear(Swish(Linear(x)))."""
+
+    def __init__(self, d_model: int, ff_dim: int, dropout: float = 0.1) -> None:
+        super().__init__()
+        self.linear1 = nn.Linear(d_model, ff_dim)
+        self.activation = nn.SiLU()
+        self.linear2 = nn.Linear(ff_dim, d_model)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (T, N, d_model)
+        x = self.linear1(x)
+        x = self.activation(x)
+        x = self.dropout(x)
+        x = self.linear2(x)
+        return self.dropout(x)
+
+
+class _ConformerConvModule(nn.Module):
+    """Conformer convolution module: LayerNorm -> GLU -> depthwise Conv1d -> linear.
+    Preserves sequence length (same padding). Input/output (T, N, d_model)."""
+
+    def __init__(
+        self,
+        d_model: int,
+        kernel_size: int = 31,
+        dropout: float = 0.1,
+    ) -> None:
+        super().__init__()
+        assert kernel_size % 2 == 1, "kernel_size should be odd for same padding"
+        padding = (kernel_size - 1) // 2
+        self.layer_norm = nn.LayerNorm(d_model)
+        self.linear1 = nn.Linear(d_model, 2 * d_model)
+        self.depthwise_conv = nn.Conv1d(d_model, d_model, kernel_size, padding=padding, groups=d_model)
+        self.linear2 = nn.Linear(d_model, d_model)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (T, N, d_model)
+        residual = x
+        x = self.layer_norm(x)
+        x = self.linear1(x)
+        x, gate = x.chunk(2, dim=-1)
+        x = x * torch.sigmoid(gate)
+        # (T, N, C) -> (N, C, T)
+        x = x.permute(1, 2, 0)
+        x = self.depthwise_conv(x)
+        x = x.permute(2, 0, 1)
+        x = self.linear2(x)
+        return self.dropout(x) + residual
+
+
+class ConformerBlock(nn.Module):
+    """Single Conformer block: macaron FF (0.5) -> MHA -> conv -> macaron FF (0.5).
+    Input and output shape: (T, N, d_model)."""
+
+    def __init__(
+        self,
+        d_model: int,
+        n_heads: int,
+        ff_dim: int,
+        conv_kernel_size: int = 31,
+        dropout: float = 0.1,
+    ) -> None:
+        super().__init__()
+        self.ff1 = _ConformerFeedForward(d_model, ff_dim, dropout)
+        self.norm1 = nn.LayerNorm(d_model)
+        self.self_attn = nn.MultiheadAttention(
+            d_model,
+            n_heads,
+            dropout=dropout,
+            batch_first=False,
+        )
+        self.norm2 = nn.LayerNorm(d_model)
+        self.conv_module = _ConformerConvModule(d_model, conv_kernel_size, dropout)
+        self.norm3 = nn.LayerNorm(d_model)
+        self.ff2 = _ConformerFeedForward(d_model, ff_dim, dropout)
+        self.norm4 = nn.LayerNorm(d_model)
+
+    def forward(
+        self,
+        x: torch.Tensor,
+        src_key_padding_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        # (T, N, d_model)
+        x = x + 0.5 * self.ff1(x)
+        x = self.norm1(x)
+        attn_out, _ = self.self_attn(
+            x, x, x,
+            key_padding_mask=src_key_padding_mask,
+            need_weights=False,
+        )
+        x = x + attn_out
+        x = self.norm2(x)
+        x = self.conv_module(x)
+        x = self.norm3(x)
+        x = x + 0.5 * self.ff2(x)
+        x = self.norm4(x)
+        return x
+
+
+class ConformerEncoder(nn.Module):
+    """Conformer encoder: sinusoidal PE + stack of Conformer blocks.
+    Same interface as CNNTransformerEncoder: (T, N, d_model) in/out, optional padding mask."""
+
+    def __init__(
+        self,
+        d_model: int,
+        num_layers: int = 4,
+        n_heads: int = 8,
+        ff_dim: int | None = None,
+        conv_kernel_size: int = 31,
+        dropout: float = 0.1,
+        max_len: int = 5000,
+    ) -> None:
+        super().__init__()
+        if ff_dim is None:
+            ff_dim = 4 * d_model
+        self.pos_encoding = PositionalEncoding(d_model, max_len=max_len, dropout=dropout)
+        self.layers = nn.ModuleList([
+            ConformerBlock(
+                d_model=d_model,
+                n_heads=n_heads,
+                ff_dim=ff_dim,
+                conv_kernel_size=conv_kernel_size,
+                dropout=dropout,
+            )
+            for _ in range(num_layers)
+        ])
+
+    def forward(
+        self,
+        inputs: torch.Tensor,
+        src_key_padding_mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        x = self.pos_encoding(inputs)
+        for layer in self.layers:
+            x = layer(x, src_key_padding_mask=src_key_padding_mask)
+        return x

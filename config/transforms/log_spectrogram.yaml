@@ -43,6 +43,7 @@ transforms:
   train:
     - ${to_tensor}
     - ${noise}
+    - ${gain_scaling}
     - ${band_rotation}
     - ${temporal_jitter}
     - ${logspec}

@@ -1,7 +1,7 @@
 defaults:
   - user: single_user
   - transforms: log_spectrogram
-  - model: cnn_transformer_ctc  # CNN + Transformer + CR-CTC (use tds_conv_crctc or tds_conv_ctc for alternatives)
+  - model: conformer_ctc  # Conformer + CR-CTC (use cnn_transformer_ctc or tds_conv_crctc for alternatives)
   - optimizer: adamw  # AdamW + decoupled weight decay (use adam for plain Adam)
   - lr_scheduler: reduce_on_plateau  # Adaptive: reduce LR when val metric plateaus (use linear_warmup_cosine_annealing for cosine)
   - decoder: ctc_greedy
@@ -12,7 +12,8 @@ seed: 1501
 batch_size: 32
 num_workers: 0  # 0 = main process only (avoids WinError 1455 / paging file on Windows when workers load torch). Use 4 on Linux/Colab for faster loading.
 train: True  # Whether to train or only run validation and test
-checkpoint: null  # Optional path to checkpoint file
+# Conformer training from scratch; set to a .ckpt path to resume
+checkpoint: null
 # Best checkpoint is selected by this metric (e.g. val/CER); also logged to CSV and TensorBoard
 monitor_metric: val/CER
 monitor_mode: min
@@ -21,7 +22,7 @@ trainer:
   accelerator: gpu
   devices: 1
   num_nodes: 1
-  max_epochs: 150
+  max_epochs: 200
   default_root_dir: ${hydra:runtime.output_dir}
   
   # Real-time logging configuration

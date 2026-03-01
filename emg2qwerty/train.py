@@ -7,6 +7,8 @@
 import logging
 import os
 import pprint
+import shutil
+import tempfile
 import traceback
 from collections.abc import Sequence
 from pathlib import Path
@@ -71,6 +73,9 @@ def main(config: DictConfig):
         module_cfg = OmegaConf.to_container(config.module, resolve=True)
         assert isinstance(module_cfg, dict)
         module_kw = {k: v for k, v in module_cfg.items() if k != "_target_"}
+        checkpoint_path = Path(config.checkpoint).expanduser().resolve()
+        load_path = str(checkpoint_path)
+        temp_ckpt = None
         # PyTorch 2.6+ defaults to weights_only=True; Lightning checkpoints contain OmegaConf/typing.
         _original_torch_load = torch.load
         try:
@@ -78,15 +83,39 @@ def main(config: DictConfig):
                 kwargs.setdefault("weights_only", False)
                 return _original_torch_load(*args, **kwargs)
             torch.load = _torch_load_allow_pickle
-            module = module.load_from_checkpoint(
-                config.checkpoint,
-                optimizer=config.optimizer,
-                lr_scheduler=config.lr_scheduler,
-                decoder=config.decoder,
-                **module_kw,
-            )
+            try:
+                module = module.load_from_checkpoint(
+                    load_path,
+                    optimizer=config.optimizer,
+                    lr_scheduler=config.lr_scheduler,
+                    decoder=config.decoder,
+                    **module_kw,
+                )
+            except PermissionError:
+                # File locked (e.g. by another process or antivirus on Windows). Try loading from a copy.
+                if not checkpoint_path.is_file():
+                    raise
+                tmp = tempfile.NamedTemporaryFile(
+                    suffix=".ckpt", delete=False, dir=checkpoint_path.parent
+                )
+                tmp.close()
+                temp_ckpt = tmp.name
+                shutil.copy2(checkpoint_path, temp_ckpt)
+                log.info(f"Loaded from temp copy (original was locked): {temp_ckpt}")
+                module = module.load_from_checkpoint(
+                    temp_ckpt,
+                    optimizer=config.optimizer,
+                    lr_scheduler=config.lr_scheduler,
+                    decoder=config.decoder,
+                    **module_kw,
+                )
         finally:
             torch.load = _original_torch_load
+            if temp_ckpt is not None and os.path.isfile(temp_ckpt):
+                try:
+                    os.unlink(temp_ckpt)
+                except OSError:
+                    pass
 
     # Instantiate LightningDataModule
     log.info(f"Instantiating LightningDataModule {config.datamodule}")

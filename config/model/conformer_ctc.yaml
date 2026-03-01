@@ -1,0 +1,21 @@
+# @package _global_
+# Conformer encoder (convolution-augmented transformer). Same front-end as CNN+Transformer,
+# then ConformerEncoder (macaron FF + MHA + conv module + FF per block).
+module:
+  _target_: emg2qwerty.lightning.ConformerCTCModule
+  in_features: 528
+  mlp_features: [384]
+  num_layers: 4
+  n_heads: 8
+  ff_dim: null
+  conv_kernel_size: 31
+  dropout: 0.1
+  max_len: 5000
+  use_cr_ctc: true
+  cr_ctc_consistency_weight: 0.0
+  cr_ctc_entropy_weight: 0.01
+
+datamodule:
+  _target_: emg2qwerty.lightning.WindowedEMGDataModule
+  window_length: 8000
+  padding: [1800, 200]
