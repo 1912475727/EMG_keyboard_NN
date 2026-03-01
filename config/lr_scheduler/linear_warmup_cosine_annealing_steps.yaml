@@ -6,7 +6,7 @@ lr_scheduler:
     _target_: emg2qwerty.schedulers.LinearWarmupCosineAnnealingStepsLR
     warmup_steps: 500
     _total_steps_from_trainer: true
-    warmup_start_lr: 1e-8
+    warmup_start_lr: 1e-5  # higher start for warmup
     eta_min: 1e-6
   interval: step
   frequency: 1
