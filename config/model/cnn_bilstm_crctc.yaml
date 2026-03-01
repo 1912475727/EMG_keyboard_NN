@@ -1,0 +1,23 @@
+# @package _global_
+# Light CNN + BiLSTM + CR-CTC (fewer params, faster to train and debug).
+# Use with: model=cnn_bilstm_crctc. Full: cnn_layers=3 lstm_hidden=256 lstm_layers=2
+module:
+  _target_: emg2qwerty.lightning.CNNBiLSTMCTCModule
+  in_features: 528  # freq * channels = (n_fft // 2 + 1) * 16
+  mlp_features: [384]
+  # CNN stage (light: 1 layer)
+  cnn_layers: 1
+  cnn_kernel_size: 31
+  # BiLSTM stage (light: 128 hidden, 1 layer)
+  lstm_hidden: 128
+  lstm_layers: 1
+  dropout: 0.1
+  # CR-CTC
+  use_cr_ctc: true
+  cr_ctc_consistency_weight: 0.0
+  cr_ctc_entropy_weight: 0.01
+
+datamodule:
+  _target_: emg2qwerty.lightning.WindowedEMGDataModule
+  window_length: 8000
+  padding: [1800, 200]

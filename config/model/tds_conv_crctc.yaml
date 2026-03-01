@@ -9,7 +9,7 @@ module:
   kernel_width: 32
   use_cr_ctc: true
   cr_ctc_consistency_weight: 0.0   # set > 0 when using two-view consistency
-  cr_ctc_entropy_weight: 0.01     # entropy regularization for less peaky posteriors
+  cr_ctc_entropy_weight: 0.01    # entropy regularization for less peaky posteriors
 
 datamodule:
   _target_: emg2qwerty.lightning.WindowedEMGDataModule

@@ -452,6 +452,57 @@ class CNNTransformerEncoder(nn.Module):
 
 
 # -----------------------------------------------------------------------------
+# CNN + BiLSTM: lightweight encoder (temporal CNN then bidirectional LSTM).
+# -----------------------------------------------------------------------------
+
+
+class CNNBiLSTMEncoder(nn.Module):
+    """Two-stage encoder: temporal CNN (local features) then bidirectional LSTM.
+    Input (T, N, d_model), output (T, N, 2 * lstm_hidden). No temporal downsampling; suitable for CTC.
+
+    Args:
+        d_model (int): Input dimension (from front-end MLP).
+        cnn_layers (int): Number of Conv1d layers.
+        cnn_kernel_size (int): Kernel size for CNN (odd for same padding).
+        lstm_hidden (int): LSTM hidden size (output per direction; total 2 * lstm_hidden).
+        lstm_layers (int): Number of stacked BiLSTM layers.
+        dropout (float): Dropout (CNN blocks and LSTM).
+    """
+
+    def __init__(
+        self,
+        d_model: int,
+        cnn_layers: int = 3,
+        cnn_kernel_size: int = 31,
+        lstm_hidden: int = 256,
+        lstm_layers: int = 2,
+        dropout: float = 0.1,
+    ) -> None:
+        super().__init__()
+        self.cnn = TemporalCNNEncoder(
+            d_model=d_model,
+            n_layers=cnn_layers,
+            kernel_size=cnn_kernel_size,
+            dropout=dropout,
+        )
+        self.lstm = nn.LSTM(
+            input_size=d_model,
+            hidden_size=lstm_hidden,
+            num_layers=lstm_layers,
+            batch_first=False,  # (T, N, C)
+            dropout=dropout if lstm_layers > 1 else 0.0,
+            bidirectional=True,
+        )
+        self.output_size = 2 * lstm_hidden
+
+    def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        """inputs: (T, N, d_model). Returns (T, N, 2 * lstm_hidden)."""
+        x = self.cnn(inputs)  # (T, N, d_model)
+        x, _ = self.lstm(x)   # (T, N, 2 * lstm_hidden)
+        return x
+
+
+# -----------------------------------------------------------------------------
 # Conformer: convolution-augmented transformer (Gulati et al., ASR).
 # Replaces CNN+Transformer with a single stack of Conformer blocks.
 # -----------------------------------------------------------------------------
