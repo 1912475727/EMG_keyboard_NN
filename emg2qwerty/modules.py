@@ -458,7 +458,8 @@ class CNNTransformerEncoder(nn.Module):
 
 class CNNBiLSTMEncoder(nn.Module):
     """Two-stage encoder: temporal CNN (local features) then bidirectional LSTM.
-    Input (T, N, d_model), output (T, N, 2 * lstm_hidden). No temporal downsampling; suitable for CTC.
+    Optional temporal downsampling between CNN and LSTM (take every lstm_subsample-th frame).
+    Input (T, N, d_model), output (T // lstm_subsample, N, 2 * lstm_hidden). Suitable for CTC.
 
     Args:
         d_model (int): Input dimension (from front-end MLP).
@@ -466,6 +467,7 @@ class CNNBiLSTMEncoder(nn.Module):
         cnn_kernel_size (int): Kernel size for CNN (odd for same padding).
         lstm_hidden (int): LSTM hidden size (output per direction; total 2 * lstm_hidden).
         lstm_layers (int): Number of stacked BiLSTM layers.
+        lstm_subsample (int): Temporal subsample factor before LSTM (1 = no downsampling).
         dropout (float): Dropout (CNN blocks and LSTM).
     """
 
@@ -476,9 +478,11 @@ class CNNBiLSTMEncoder(nn.Module):
         cnn_kernel_size: int = 31,
         lstm_hidden: int = 256,
         lstm_layers: int = 2,
+        lstm_subsample: int = 1,
         dropout: float = 0.1,
     ) -> None:
         super().__init__()
+        self.lstm_subsample = lstm_subsample
         self.cnn = TemporalCNNEncoder(
             d_model=d_model,
             n_layers=cnn_layers,
@@ -496,9 +500,11 @@ class CNNBiLSTMEncoder(nn.Module):
         self.output_size = 2 * lstm_hidden
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
-        """inputs: (T, N, d_model). Returns (T, N, 2 * lstm_hidden)."""
+        """inputs: (T, N, d_model). Returns (T', N, 2 * lstm_hidden) with T' = T // lstm_subsample."""
         x = self.cnn(inputs)  # (T, N, d_model)
-        x, _ = self.lstm(x)   # (T, N, 2 * lstm_hidden)
+        if self.lstm_subsample > 1:
+            x = x[:: self.lstm_subsample, :, :]  # (T // lstm_subsample, N, d_model)
+        x, _ = self.lstm(x)   # (T', N, 2 * lstm_hidden)
         return x
 
 

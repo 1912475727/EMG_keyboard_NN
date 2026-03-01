@@ -7,8 +7,9 @@ module:
   mlp_features: [384]
   cnn_layers: 3
   cnn_kernel_size: 11
-  lstm_hidden: 128
+  lstm_hidden: 256
   lstm_layers: 2
+  lstm_subsample: 2
   dropout: 0.05
   use_cr_ctc: false  # plain CTC
   cr_ctc_consistency_weight: 0.0

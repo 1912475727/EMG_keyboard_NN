@@ -8,9 +8,10 @@ module:
   # CNN stage: 3 layers, smaller kernel (11, odd for same padding) for stability with depth
   cnn_layers: 3
   cnn_kernel_size: 11
-  # BiLSTM: 2 layers
-  lstm_hidden: 128
+  # BiLSTM: 2 layers, larger hidden; 2x temporal subsample inside encoder
+  lstm_hidden: 256
   lstm_layers: 2
+  lstm_subsample: 2
   dropout: 0.05  # reduced slightly from 0.1
   # CR-CTC (entropy weight increased slightly)
   use_cr_ctc: true

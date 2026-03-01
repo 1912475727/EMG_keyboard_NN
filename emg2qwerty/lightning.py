@@ -475,6 +475,7 @@ class CNNBiLSTMCTCModule(pl.LightningModule):
         cnn_kernel_size: int,
         lstm_hidden: int,
         lstm_layers: int,
+        lstm_subsample: int = 1,
         dropout: float = 0.1,
         use_cr_ctc: bool = True,
         cr_ctc_consistency_weight: float = 0.0,
@@ -502,6 +503,7 @@ class CNNBiLSTMCTCModule(pl.LightningModule):
             cnn_kernel_size=cnn_kernel_size,
             lstm_hidden=lstm_hidden,
             lstm_layers=lstm_layers,
+            lstm_subsample=lstm_subsample,
             dropout=dropout,
         )
         self.head = nn.Sequential(
