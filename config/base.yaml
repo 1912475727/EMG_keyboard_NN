@@ -22,7 +22,7 @@ trainer:
   accelerator: gpu
   devices: 1
   num_nodes: 1
-  max_epochs: 200
+  max_epochs: 100
   gradient_clip_val: 1.0  # clip by norm; helps Conformer/Transformer avoid flat loss and instability
   gradient_clip_algorithm: "norm"
   default_root_dir: ${hydra:runtime.output_dir}
