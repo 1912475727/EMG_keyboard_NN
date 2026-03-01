@@ -1,6 +1,6 @@
 # @package _global_
-# CNN + BiLSTM + CR-CTC: 3-layer CNN (kernel 12), 2-layer BiLSTM, warmup scheduler, gradient clipping in base.
-# Use with: model=cnn_bilstm_crctc. Base trainer has gradient_clip_val=1.0; this config selects warmup scheduler.
+# CNN + BiLSTM + plain CTC (no CR-CTC). Same architecture as cnn_bilstm_crctc.
+# Use with: model=cnn_bilstm_ctc.
 defaults:
   - override /lr_scheduler: linear_warmup_cosine_annealing
 
@@ -8,15 +8,12 @@ module:
   _target_: emg2qwerty.lightning.CNNBiLSTMCTCModule
   in_features: 528  # freq * channels = (n_fft // 2 + 1) * 16
   mlp_features: [384]
-  # CNN stage: 3 layers, smaller kernel (11, odd for same padding) for stability with depth
   cnn_layers: 3
   cnn_kernel_size: 11
-  # BiLSTM: 2 layers
   lstm_hidden: 128
   lstm_layers: 2
-  dropout: 0.05  # reduced slightly from 0.1
-  # CR-CTC (entropy weight increased slightly)
-  use_cr_ctc: true
+  dropout: 0.05
+  use_cr_ctc: false  # plain CTC
   cr_ctc_consistency_weight: 0.0
   cr_ctc_entropy_weight: 0.02
 
