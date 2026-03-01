@@ -1,6 +1,9 @@
 # @package _global_
 # Conformer encoder (convolution-augmented transformer). Same front-end as CNN+Transformer,
 # then ConformerEncoder (macaron FF + MHA + conv module + FF per block).
+# Slightly higher LR helps Conformer from scratch escape flat loss in early epochs.
+optimizer:
+  lr: 2.0e-3
 module:
   _target_: emg2qwerty.lightning.ConformerCTCModule
   in_features: 528
