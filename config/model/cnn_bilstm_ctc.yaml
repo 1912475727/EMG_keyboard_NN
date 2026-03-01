@@ -1,9 +1,6 @@
 # @package _global_
 # CNN + BiLSTM + plain CTC (no CR-CTC). Same architecture as cnn_bilstm_crctc.
-# Use with: model=cnn_bilstm_ctc.
-defaults:
-  - override /lr_scheduler: linear_warmup_cosine_annealing
-
+# For warmup, run with: model=cnn_bilstm_ctc lr_scheduler=linear_warmup_cosine_annealing
 module:
   _target_: emg2qwerty.lightning.CNNBiLSTMCTCModule
   in_features: 528  # freq * channels = (n_fft // 2 + 1) * 16
