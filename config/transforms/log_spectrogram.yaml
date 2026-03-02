@@ -3,6 +3,10 @@ to_tensor:
   _target_: emg2qwerty.transforms.ToTensor
   fields: [emg_left, emg_right]
 
+channel_select:
+  _target_: emg2qwerty.transforms.SelectChannels
+  num_channels: ${electrode_channels}
+
 noise:
   _target_: emg2qwerty.transforms.AdditiveGaussianNoise
   scale: 0.04  # noise std = 4% of signal std
@@ -42,6 +46,7 @@ specaug:
 transforms:
   train:
     - ${to_tensor}
+    - ${channel_select}
     - ${noise}
     - ${gain_scaling}
     - ${band_rotation}
@@ -51,6 +56,7 @@ transforms:
 
   val:
     - ${to_tensor}
+    - ${channel_select}
     - ${logspec}
 
   test: ${transforms.val}

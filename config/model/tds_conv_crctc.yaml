@@ -1,9 +1,8 @@
 # @package _global_
 # TDS baseline + CR-CTC (Consistency-Regularized CTC). Use with: model=tds_conv_crctc
-# Base config uses AdamW and reduce_on_plateau; no experiment needed.
 module:
   _target_: emg2qwerty.lightning.TDSConvCTCModule
-  in_features: 528
+  electrode_channels: ${electrode_channels}
   mlp_features: [384]
   block_channels: [24, 24, 24, 24]
   kernel_width: 32

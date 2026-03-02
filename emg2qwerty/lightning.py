@@ -137,13 +137,16 @@ class WindowedEMGDataModule(pl.LightningDataModule):
         )
 
 
+# Freq bins from LogSpectrogram (n_fft=64)
+TDS_FREQ_BINS: int = 64 // 2 + 1  # 33
+
+
 class TDSConvCTCModule(pl.LightningModule):
     NUM_BANDS: ClassVar[int] = 2
-    ELECTRODE_CHANNELS: ClassVar[int] = 16
 
     def __init__(
         self,
-        in_features: int,
+        electrode_channels: int = 16,
         mlp_features: Sequence[int],
         block_channels: Sequence[int],
         kernel_width: int,
@@ -156,14 +159,13 @@ class TDSConvCTCModule(pl.LightningModule):
     ) -> None:
         super().__init__()
         self.save_hyperparameters()
-
+        in_features = TDS_FREQ_BINS * electrode_channels  # 33 * C per band
         num_features = self.NUM_BANDS * mlp_features[-1]
 
         # Model
-        # inputs: (T, N, bands=2, electrode_channels=16, freq)
+        # inputs: (T, N, bands=2, electrode_channels, freq)
         self.model = nn.Sequential(
-            # (T, N, bands=2, C=16, freq)
-            SpectrogramNorm(channels=self.NUM_BANDS * self.ELECTRODE_CHANNELS),
+            SpectrogramNorm(channels=self.NUM_BANDS * electrode_channels),
             # (T, N, bands=2, mlp_features[-1])
             MultiBandRotationInvariantMLP(
                 in_features=in_features,

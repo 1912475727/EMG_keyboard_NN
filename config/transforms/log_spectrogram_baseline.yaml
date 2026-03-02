@@ -5,6 +5,10 @@ to_tensor:
   _target_: emg2qwerty.transforms.ToTensor
   fields: [emg_left, emg_right]
 
+channel_select:
+  _target_: emg2qwerty.transforms.SelectChannels
+  num_channels: ${electrode_channels}
+
 band_rotation:
   _target_: emg2qwerty.transforms.ForEach
   transform:
@@ -30,6 +34,7 @@ specaug:
 transforms:
   train:
     - ${to_tensor}
+    - ${channel_select}
     - ${band_rotation}
     - ${temporal_jitter}
     - ${logspec}
@@ -37,6 +42,7 @@ transforms:
 
   val:
     - ${to_tensor}
+    - ${channel_select}
     - ${logspec}
 
   test: ${transforms.val}

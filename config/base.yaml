@@ -9,6 +9,7 @@ defaults:
   - _self_
 
 seed: 1501
+electrode_channels: 16  # number of channels per band for channel ablation (override, e.g. 4, 8, 12)
 batch_size: 32
 num_workers: 0  # 0 = main process only (avoids WinError 1455 / paging file on Windows when workers load torch). Use 4 on Linux/Colab for faster loading.
 train: True  # Whether to train or only run validation and test

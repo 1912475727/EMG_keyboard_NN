@@ -43,6 +43,19 @@ class ToTensor:
 
 
 @dataclass
+class SelectChannels:
+    """Select the first ``num_channels`` electrode channels (last dimension).
+    Use for channel ablation: pass electrode_channels from config so model and
+    transform stay in sync. Input shape (T, ..., C), output (T, ..., num_channels).
+    """
+
+    num_channels: int = 16
+
+    def __call__(self, tensor: torch.Tensor) -> torch.Tensor:
+        return tensor[..., : self.num_channels].contiguous()
+
+
+@dataclass
 class Lambda:
     """Applies a custom lambda function as a transform.
 
