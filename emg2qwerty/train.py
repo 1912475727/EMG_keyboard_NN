@@ -4,10 +4,12 @@
 # This source code is licensed under the license found in the
 # LICENSE file in the root directory of this source tree.
 
+import importlib
 import logging
 import os
 import pprint
 import shutil
+import sys
 import tempfile
 import traceback
 from collections.abc import Sequence
@@ -29,13 +31,19 @@ log = logging.getLogger(__name__)
 
 @hydra.main(version_base=None, config_path="../config", config_name="base")
 def main(config: DictConfig):
+    # Resolve all interpolations (e.g. ${electrode_channels}) so nested configs get root values
+    OmegaConf.resolve(config)
     log.info(f"\nConfig:\n{OmegaConf.to_yaml(config)}")
 
-    # Add working dir to PYTHONPATH
+    # Add working dir to sys.path and PYTHONPATH so Hydra can import emg2qwerty.lightning
+    # (Hydra may change cwd to output dir; imports use sys.path, which is not updated by PYTHONPATH alone)
     working_dir = get_original_cwd()
+    working_dir_str = str(working_dir)
+    if working_dir_str not in sys.path:
+        sys.path.insert(0, working_dir_str)
     python_paths = os.environ.get("PYTHONPATH", "").split(os.pathsep)
-    if working_dir not in python_paths:
-        python_paths.append(working_dir)
+    if working_dir_str not in python_paths:
+        python_paths.append(working_dir_str)
         os.environ["PYTHONPATH"] = os.pathsep.join(python_paths)
 
     # Seed for determinism. This seeds torch, numpy and python random modules
@@ -57,15 +65,29 @@ def main(config: DictConfig):
     def _build_transform(configs: Sequence[DictConfig]) -> Transform[Any, Any]:
         return transforms.Compose([instantiate(cfg) for cfg in configs])
 
-    # Instantiate LightningModule
+    # Instantiate LightningModule (import class after sys.path is set so Hydra can resolve emg2qwerty.lightning)
     log.info(f"Instantiating LightningModule {config.module}")
-    module = instantiate(
-        config.module,
-        optimizer=config.optimizer,
-        lr_scheduler=config.lr_scheduler,
-        decoder=config.decoder,
-        _recursive_=False,
-    )
+    target = OmegaConf.select(config.module, "_target_", default=None)
+    if isinstance(target, str) and "emg2qwerty.lightning" in target:
+        mod_path, cls_name = target.rsplit(".", 1)
+        mod = importlib.import_module(mod_path)
+        LightningClass = getattr(mod, cls_name)
+        module = instantiate(
+            config.module,
+            _target_=LightningClass,
+            optimizer=config.optimizer,
+            lr_scheduler=config.lr_scheduler,
+            decoder=config.decoder,
+            _recursive_=False,
+        )
+    else:
+        module = instantiate(
+            config.module,
+            optimizer=config.optimizer,
+            lr_scheduler=config.lr_scheduler,
+            decoder=config.decoder,
+            _recursive_=False,
+        )
     if config.checkpoint is not None:
         log.info(f"Loading module from checkpoint {config.checkpoint}")
         # Build module init kwargs from current config so checkpoints with missing/different

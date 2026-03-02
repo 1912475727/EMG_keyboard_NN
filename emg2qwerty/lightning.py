@@ -146,10 +146,10 @@ class TDSConvCTCModule(pl.LightningModule):
 
     def __init__(
         self,
-        electrode_channels: int = 16,
         mlp_features: Sequence[int],
         block_channels: Sequence[int],
         kernel_width: int,
+        electrode_channels: int = 16,
         use_cr_ctc: bool = False,
         cr_ctc_consistency_weight: float = 0.0,
         cr_ctc_entropy_weight: float = 0.0,
